@@ -11,7 +11,7 @@ my $ssc;
 my $event;
 my $threshold = 10;
 my $out="astalavista.psi.out";
-my $verbose;
+my $outdir;
 my $help;
 
 if (!@ARGV) {
@@ -27,6 +27,7 @@ GetOptions(
     'event|e=s' => \$event,
     'Threshold|t:i' => \$threshold,
     'out|o:s' => \$out,
+    'outdir|d' => \$outdir,
     'help|h|?' => \$help
    ) or die("Error in command line arguments\n\n*** --help *** for usage\n\n");
 
@@ -54,12 +55,12 @@ sub usage {
 		    ME  = mutually exclusive exons
 		    AD  = alternative donor
 		    AA  = alternative acceptor
+		    ALL = all events
     --threshold|t : minimum number of read counts for the sum of all splice site junctions and boundaries
                     PSI=NA if the sum is below the threshold  (default = 10) 
 		    e.g. single exon skipping: PSI=a+b/a+b+2c, a+b+c > threshold
-    --out|o       : output file name [optional] (without extension)
-    --outdir      : folder to write output files
-#    --verbose|v   : foreach event print type_of_event structure PSI
+    --out|o       : output file name (without extension) [default=astalavista.psi.out]
+    --outdir|d    : output files written in one folder for each event type [default: selected events are written in a single file]
     --help
     
   Example:
@@ -79,19 +80,30 @@ print STDERR "#============= PSI LOCAL: ASTALAVISTA + IPSA ==================\n\
 #=====================================================================
 my $warn=0;
 
-#========
-# events
-#========
+#=========================================================
+# read selected events and create outfolders if required |
+#=========================================================
 my @events= split(/,/,$event);
+if($events[0] eq "ALL"){
+   @events = ("ESS", "ESM", "IR", "ME", "AD", "AA");
+}
 print STDERR "SELECTED EVENTS:\n";
 foreach my $e (@events){
     print STDERR "$e\n";
-    `mkdir -p $e`;
+    if($outdir){
+	`mkdir -p $e`;
+    }
 }
 
-#=============================
+
+#===============
+# output files |
+#===============
+# all events in a single output file
+my $outallg;
+my $outallt;
+
 # output files for each event
-#=============================
 my $essg;
 my $esst;
 my $irg;
@@ -105,32 +117,45 @@ my $aat;
 my $esmg;
 my $esmt;
 
-if("ESS" ~~ @events){
-    open($essg,">ESS/$out.gtf"); #open output file
-    open($esst,">ESS/$out.tsv"); #open output file
-}
-if("IR" ~~ @events){
-    open($irg,">IR/$out.gtf"); #open output file
-    open($irt,">IR/$out.tsv"); #open output file
-}
-if("ME" ~~ @events){
-    open($meg,">ME/$out.gtf"); #open output file
-    open($met,">ME/$out.tsv"); #open output file
-}
-if("AD" ~~ @events){
-    open($adg,">AD/$out.gtf"); #open output file
-    open($adt,">AD/$out.tsv"); #open output file
-}
-if("AA" ~~ @events){
-    open($aag,">AA/$out.gtf"); #open output file
-    open($aat,">AA/$out.tsv"); #open output file
-}
-if("ESM" ~~ @events){
-    open($esmg,">ESM/$out.gtf"); #open output file
-    open($esmt,">ESM/$out.tsv"); #open output file
+#-----------------------------------------------
+# selected events are written in a single file |
+#-----------------------------------------------
+if(!$outdir){
+    open($outallg,">$out.gtf"); #open output file
+    open($outallt,">$out.tsv"); #open output file
+}else{
+#---------------------------------------------------------
+# output files written in one folder for each event type |
+#---------------------------------------------------------    
+# open output files
+    if("ESS" ~~ @events){
+	open($essg,">ESS/$out.gtf"); #open output file
+	open($esst,">ESS/$out.tsv"); #open output file
+    }
+    if("IR" ~~ @events){
+	open($irg,">IR/$out.gtf"); #open output file
+	open($irt,">IR/$out.tsv"); #open output file
+    }
+    if("ME" ~~ @events){
+	open($meg,">ME/$out.gtf"); #open output file
+	open($met,">ME/$out.tsv"); #open output file
+    }
+    if("AD" ~~ @events){
+	open($adg,">AD/$out.gtf"); #open output file
+	open($adt,">AD/$out.tsv"); #open output file
+    }
+    if("AA" ~~ @events){
+	open($aag,">AA/$out.gtf"); #open output file
+	open($aat,">AA/$out.tsv"); #open output file
+    }
+    if("ESM" ~~ @events){
+	open($esmg,">ESM/$out.gtf"); #open output file
+	open($esmt,">ESM/$out.tsv"); #open output file
+    }
 }
 
 
+######################################################
 #===================
 # READING SSJ FILE
 #===================
@@ -265,30 +290,58 @@ while(my $line = <A>){
 	    }else{
 		$psi="NA";
 	    }
-
-	    # print gtf output
-	    print $essg $line."psi \"";
-	    if($psi ne "NA"){
-		printf $essg ("%.4f", $psi);
-	    }else{
-		print $essg $psi;
-	    }
-	    print $essg "\";\n";
 	    
-            # print tsv output
-	    print $esst "$id\t";
-	    if($psi ne "NA"){
-		printf $esst ("%.4f", $psi);
+	    #-------------------------------------
+	    # one out folder for each event type |
+	    #-------------------------------------
+	    if($outdir){
+		
+		# print gtf output
+		print $essg $line."psi \"";
+		if($psi ne "NA"){
+		    printf $essg ("%.4f", $psi);
+		}else{
+		    print $essg $psi;
+		}
+		print $essg "\";\n";
+		
+		# print tsv output
+		print $esst "$id\t";
+		if($psi ne "NA"){
+		    printf $esst ("%.4f", $psi);
+		}else{
+		    print $esst $psi;
+		}
+		print $esst "\n";
+ 	
 	    }else{
-		print $esst $psi;
+	    #------------------------------
+            # single file with all events |
+	    #------------------------------
+		# print gtf output
+		print $outallg $line."psi \"";
+		if($psi ne "NA"){
+		    printf $outallg ("%.4f", $psi);
+		}else{
+		    print $outallg $psi;
+		}
+		print $outallg "\";\n";
+		
+		# print tsv output
+		print $outallt "$id\t";
+		if($psi ne "NA"){
+		    printf $outallt ("%.4f", $psi);
+		}else{
+		    print $outallt $psi;
+		}
+		print $outallt "\n";
+		
 	    }
-	    print $esst "\n";
-	    
 	}else{
 	    print STDERR "Splice chain $splice_chain does not have the expected format $structure\n";
-	}
-    }
-    
+	}	    
+	
+    } # close ESS
 
     #------------------
     # INTRON RETENTION
@@ -336,7 +389,7 @@ while(my $line = <A>){
 		$c = $ssc{$chr."_".$sc2[1]."_".$strand};
 	    }
 	    
-
+	    
 	    # compute PSI
 	    my $psi;
 	    
@@ -346,23 +399,51 @@ while(my $line = <A>){
 		$psi="NA";
 	    }
 	    
-	    # print gtf output
-	    print $irg $line."psi \"";
-	    if($psi ne "NA"){
-		printf $irg ("%.4f", $psi);
+            #-------------------------------------
+	    # one out folder for each event type |
+	    #-------------------------------------
+	    if($outdir){
+		
+		# print gtf output
+		print $irg $line."psi \"";
+		if($psi ne "NA"){
+		    printf $irg ("%.4f", $psi);
+		}else{
+		    print $irg $psi;
+		}
+		print $irg "\";\n";
+		
+		# print tsv output
+		print $irt "$id\t";
+		if($psi ne "NA"){
+		    printf $irt ("%.4f", $psi);
+		}else{
+		    print $irt $psi;
+		}
+		print $irt "\n";
 	    }else{
-		print $irg $psi;
+		#------------------------------
+		# single file with all events |
+		#------------------------------
+		
+		# print gtf output
+		print $outallg $line."psi \"";
+		if($psi ne "NA"){
+		    printf $outallg ("%.4f", $psi);
+		}else{
+		    print $outallg $psi;
+		}
+		print $outallg "\";\n";
+		
+		# print tsv output
+		print $outallt "$id\t";
+		if($psi ne "NA"){
+		    printf $outallt ("%.4f", $psi);
+		}else{
+		    print $outallt $psi;
+		}
+		print $outallt "\n";
 	    }
-	    print $irg "\";\n";
-    
-	    # print tsv output
-	    print $irt "$id\t";
-	    if($psi ne "NA"){
-		printf $irt ("%.4f", $psi);
-	    }else{
-		print $irt $psi;
-	    }
-	    print $irt "\n";
 	    
 	}else{
 	    print STDERR "Splice chain $splice_chain does not have the expected format $structure\n";
@@ -451,24 +532,56 @@ while(my $line = <A>){
 		    $psi="NA";
 		}
 
-		# print gtf output
-		print $meg $line."psi \"";
-		if($psi ne "NA"){
-		    printf $meg ("%.4f", $psi);
+
+                #-------------------------------------
+		# one out folder for each event type |
+		#-------------------------------------
+		if($outdir){
+		    
+		    # print gtf output
+		    print $meg $line."psi \"";
+		    if($psi ne "NA"){
+			printf $meg ("%.4f", $psi);
+		    }else{
+			print $meg $psi;
+		    }
+		    print $meg "\";\n";
+		    
+		    # print tsv output
+		    print $met "$id\t";
+		    if($psi ne "NA"){
+			printf $met ("%.4f", $psi);
+		    }else{
+			print $met $psi;
+		    }
+		    print $met "\n";
+		    
 		}else{
-		    print $meg $psi;
+		    
+		    #------------------------------
+		    # single file with all events |
+		    #------------------------------
+		    
+		    
+		    # print gtf output
+		    print $outallg $line."psi \"";
+		    if($psi ne "NA"){
+			printf $outallg ("%.4f", $psi);
+		    }else{
+			print $outallg $psi;
+		    }
+		    print $outallg "\";\n";
+		    
+		    # print tsv output
+		    print $outallt "$id\t";
+		    if($psi ne "NA"){
+			printf $outallt ("%.4f", $psi);
+		    }else{
+			print $outallt $psi;
+		    }
+		    print $outallt "\n";
+		    
 		}
-		print $meg "\";\n";
-		
-		# print tsv output
-		print $met "$id\t";
-		if($psi ne "NA"){
-		    printf $met ("%.4f", $psi);
-		}else{
-		    print $met $psi;
-		}
-		print $met "\n";
-		
 	    }
 	}else{
 	    print STDERR "Splice chain $splice_chain does not have the expected format $structure\n";
@@ -520,28 +633,58 @@ while(my $line = <A>){
 	    }else{
 		$psi="NA";
 	    }
-	    # print gtf output
-	    print $adg $line."psi \"";
-	    if($psi ne "NA"){
-		printf $adg ("%.4f", $psi);
-	    }else{
-		print $adg $psi;
-	    }
-	    print $adg "\";\n";
-	    
-	    # print tsv output
-	    print $adt "$id\t";
-	    if($psi ne "NA"){
-		printf $adt ("%.4f", $psi);
-	    }else{
-		print $adt $psi;
-	    }
-	    print $adt "\n";
-	    	    
-	}
-       
-    }
 
+	    #-------------------------------------
+	    # one out folder for each event type |
+	    #-------------------------------------
+	    if($outdir){
+		
+		# print gtf output
+		print $adg $line."psi \"";
+		if($psi ne "NA"){
+		    printf $adg ("%.4f", $psi);
+		}else{
+		    print $adg $psi;
+		}
+		print $adg "\";\n";
+		
+		# print tsv output
+		print $adt "$id\t";
+		if($psi ne "NA"){
+		    printf $adt ("%.4f", $psi);
+		}else{
+		    print $adt $psi;
+		}
+		print $adt "\n";
+		
+	    }else{
+		
+		#------------------------------
+		# single file with all events |
+		#------------------------------
+		
+		# print gtf output
+		print $outallg $line."psi \"";
+		if($psi ne "NA"){
+		    printf $outallg ("%.4f", $psi);
+		}else{
+		    print $outallg $psi;
+		}
+		print $outallg "\";\n";
+		
+		# print tsv output
+		print $outallt "$id\t";
+		if($psi ne "NA"){
+		    printf $outallt ("%.4f", $psi);
+		}else{
+		    print $outallt $psi;
+		}
+		print $outallt "\n";
+		
+	    }   
+	}	
+    }
+    
     #---------------------------
     # ALTERNATIVE ACCEPTOR
     #---------------------------
@@ -598,28 +741,62 @@ while(my $line = <A>){
 	    }else{
 		$psi="NA";
 	    }
-	    # print gtf output
-	    print $aag $line."psi \"";
-	    if($psi ne "NA"){
-		printf $aag ("%.4f", $psi);
+
+
+	    #-------------------------------------
+	    # one out folder for each event type |
+	    #-------------------------------------
+	    if($outdir){
+		
+		# print gtf output
+		print $aag $line."psi \"";
+		if($psi ne "NA"){
+		    printf $aag ("%.4f", $psi);
+		}else{
+		    print $aag $psi;
+		}
+		print $aag "\";\n";
+		
+		# compute tsv output
+		print $aat "$id\t";
+		if($psi ne "NA"){
+		    printf $aat ("%.4f", $psi);
+		}else{
+		    print $aat $psi;
+		}
+		print $aat "\n";
+		
+		
 	    }else{
-		print $aag $psi;
+		
+		#------------------------------
+		# single file with all events |
+		#------------------------------
+		
+		# print gtf output
+		print $outallg $line."psi \"";
+		if($psi ne "NA"){
+		    printf $outallg ("%.4f", $psi);
+		}else{
+		    print $outallg $psi;
+		}
+		print $outallg "\";\n";
+		
+		# compute tsv output
+		print $outallt "$id\t";
+		if($psi ne "NA"){
+		    printf $outallt ("%.4f", $psi);
+		}else{
+		    print $outallt $psi;
+		}
+		print $outallt "\n";
+		
 	    }
-	    print $aag "\";\n";
-	    
-	    # compute tsv output
-	    print $aat "$id\t";
-	    if($psi ne "NA"){
-		printf $aat ("%.4f", $psi);
-	    }else{
-		print $aat $psi;
-	    }
-	    print $aat "\n";
 	    
 	}
 	
     }
-
+    
     #-----------------------
     # EXON SKIPPING MULTIPLE
     #-----------------------
@@ -690,24 +867,60 @@ while(my $line = <A>){
 		}else{
 		    $psi="NA";
 		}
-		
-		# print gtf output
-		print $esmg $line."psi \"";
-		if($psi ne "NA"){
-		    printf $esmg ("%.4f", $psi);
-		}else{
-		    print $esmg $psi;
-		}
-		print $esmg "\";\n";
-		
-		# print tsv output
-		print $esmt "$id\t";
-		if($psi ne "NA"){
-		    printf $esmt ("%.4f", $psi);
-		}else{
-		    print $esmt $psi;
+
+
+
+		#-------------------------------------
+		# one out folder for each event type |
+		#-------------------------------------
+		if($outdir){
+		    
+		    # print gtf output
+		    print $esmg $line."psi \"";
+		    if($psi ne "NA"){
+			printf $esmg ("%.4f", $psi);
+		    }else{
+			print $esmg $psi;
 		    }
-		print $esmt "\n";
+		    print $esmg "\";\n";
+		    
+		    # print tsv output
+		    print $esmt "$id\t";
+		    if($psi ne "NA"){
+			printf $esmt ("%.4f", $psi);
+		    }else{
+			print $esmt $psi;
+		    }
+		    print $esmt "\n";
+		    
+		}else{
+		    
+		    #------------------------------
+		    # single file with all events |
+		    #------------------------------
+		    
+		    
+		    # print gtf output
+		    print $outallg $line."psi \"";
+		    if($psi ne "NA"){
+			printf $outallg ("%.4f", $psi);
+		    }else{
+			print $outallg $psi;
+		    }
+		    print $outallg "\";\n";
+		    
+		    # print tsv output
+		    print $outallt "$id\t";
+		    if($psi ne "NA"){
+			printf $outallt ("%.4f", $psi);
+		    }else{
+			print $outallt $psi;
+		    }
+		    print $outallt "\n";
+		    
+		    
+		}
+		
 		
 	    }
 	}
@@ -716,29 +929,34 @@ while(my $line = <A>){
 
 # close files
 close(A);
-if("ESS" ~~ @events){
-    close($essg);
-    close($esst);
-}
-if("IR" ~~ @events){
-    close($irg);
-    close($irt);
-}
-if("ME" ~~ @events){
-    close($meg);
-    close($met);
-}
-if("AD" ~~ @events){
-    close($adg);
-    close($adt);
-}
-if("AA" ~~ @events){
-    close($aag);
-    close($aat);
-}
-if("ESM" ~~ @events){
-    close($esmg);
-    close($esmt);
+if($outdir){
+    if("ESS" ~~ @events){
+	close($essg);
+	close($esst);
+    }
+    if("IR" ~~ @events){
+	close($irg);
+	close($irt);
+    }
+    if("ME" ~~ @events){
+	close($meg);
+	close($met);
+    }
+    if("AD" ~~ @events){
+	close($adg);
+	close($adt);
+    }
+    if("AA" ~~ @events){
+	close($aag);
+	close($aat);
+    }
+    if("ESM" ~~ @events){
+	close($esmg);
+	close($esmt);
+    }
+}else{
+    close($outallg);
+    close($outallt);
 }
 
 # warnings
